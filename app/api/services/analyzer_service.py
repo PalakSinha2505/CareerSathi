@@ -91,6 +91,9 @@ Return ONLY valid JSON in this format:
 
     for attempt in range(2):
         try:
+            print("MODEL:", MODEL_NAME)
+            print("KEY PRESENT:", bool(COHERE_API_KEY))
+
             response = co.chat(
                 model=MODEL_NAME,
                 messages=[
@@ -110,6 +113,9 @@ Return ONLY valid JSON in this format:
             return parsed
 
         except Exception as e:
-            print(" REAL ERROR:", e)
-            raise e
+            print("REAL ERROR:", e)
+            if attempt == 1:
+                return DEFAULT_RESPONSE
+            time.sleep(1)
+
 
