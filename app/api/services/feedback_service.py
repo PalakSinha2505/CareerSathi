@@ -10,7 +10,7 @@ load_dotenv()
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 HF_MODEL = os.getenv("HF_MODEL") or "google/gemma-2b-it"
 
-MODEL_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}"
+MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
 headers = {
     "Authorization": f"Bearer {HF_API_TOKEN}"
@@ -106,10 +106,16 @@ Return ONLY valid JSON in this format:
                         "max_new_tokens": 800,
                         "temperature": 0.4,
                         "return_full_text": False
+                    },
+                    "options": {
+                        "wait_for_model": True
                     }
                 },
                 timeout=90
             )
+
+            if response.status_code != 200:
+                raise Exception(f"HF API error {response.status_code}: {response.text}")
 
             result = response.json()
 
