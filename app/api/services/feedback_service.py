@@ -28,6 +28,7 @@ You must:
 - Explain how specific parts reduce clarity, confidence, or credibility
 - Focus on communication quality and structure
 - Give advice the candidate can immediately apply
+- Ensure newline characters inside strings are escaped using \\n.
 
 Return raw JSON only.
 Do NOT wrap JSON in markdown.
@@ -45,15 +46,23 @@ DEFAULT_FEEDBACK = {
 def _clean_json(text: str) -> str:
     text = text.strip()
 
+    # Remove markdown fences
     if text.startswith("```"):
-        text = text.split("```")[1]
+        parts = text.split("```")
+        if len(parts) >= 2:
+            text = parts[1]
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
 
+    # Extract JSON block
     match = re.search(r"\{[\s\S]*\}", text)
     if match:
-        return match.group()
+        text = match.group()
+
+    # Remove control characters
+    text = text.replace("\r", "")
+    text = text.replace("\t", " ")
 
     return text
 
@@ -113,7 +122,9 @@ Return ONLY valid JSON in this format:
             raw_text = result["choices"][0]["message"]["content"]
 
             cleaned = _clean_json(raw_text)
-            parsed = json.loads(cleaned)
+
+            # 🔥 strict=False prevents crash
+            parsed = json.loads(cleaned, strict=False)
 
             return parsed
 

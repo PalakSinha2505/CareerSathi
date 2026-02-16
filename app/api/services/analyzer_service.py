@@ -2,6 +2,7 @@ import json
 import requests
 import time
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,6 +31,7 @@ Focus on HOW the answer is delivered rather than technical correctness.
 Be strict but fair.
 Do NOT give identical scores unless truly deserved.
 Do NOT give 7+ unless the answer is structured and confident.
+Ensure newline characters inside strings are escaped using \\n.
 Return raw JSON only.
 Do NOT wrap JSON in markdown.
 """
@@ -51,6 +53,7 @@ DEFAULT_RESPONSE = {
 def _clean_json(raw_text: str):
     raw_text = raw_text.strip()
 
+    # Remove markdown fences
     if raw_text.startswith("```"):
         parts = raw_text.split("```")
         if len(parts) >= 2:
@@ -58,6 +61,15 @@ def _clean_json(raw_text: str):
         if raw_text.startswith("json"):
             raw_text = raw_text[4:]
         raw_text = raw_text.strip()
+
+    # Extract JSON block only
+    match = re.search(r"\{[\s\S]*\}", raw_text)
+    if match:
+        raw_text = match.group()
+
+    # Remove problematic control characters
+    raw_text = raw_text.replace("\r", "")
+    raw_text = raw_text.replace("\t", " ")
 
     return raw_text
 
@@ -118,7 +130,9 @@ Return ONLY valid JSON in this format:
             raw_text = result["choices"][0]["message"]["content"]
 
             cleaned = _clean_json(raw_text)
-            parsed = json.loads(cleaned)
+
+            # 🔥 strict=False prevents control character crash
+            parsed = json.loads(cleaned, strict=False)
 
             return parsed
 
