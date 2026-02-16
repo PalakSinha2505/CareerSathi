@@ -1,14 +1,20 @@
-from cohere import ClientV2
 import os
 import json
 import re
 import time
+import requests
 from dotenv import load_dotenv
-from httpx import RemoteProtocolError, HTTPError
 
 load_dotenv()
 
-co = ClientV2(api_key=os.getenv("COHERE_API_KEY"))
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
+
+MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+
+headers = {
+    "Authorization": f"Bearer {HF_API_TOKEN}"
+}
 
 SYSTEM_PROMPT = """
 You are a senior technical interviewer and career mentor with high hiring standards.
@@ -16,15 +22,14 @@ You are a senior technical interviewer and career mentor with high hiring standa
 Your job is NOT to be polite.
 Your job is to be honest, precise, and useful.
 
-Evaluate the candidate as if this were a real interview that affects their career.
-
 You must:
 - Explicitly call out vague, weak, or careless phrasing
 - Explain how specific parts reduce clarity, confidence, or credibility
 - Focus on communication quality and structure
 - Give advice the candidate can immediately apply
 
-Return ONLY valid JSON.
+Return raw JSON only.
+Do NOT wrap JSON in markdown.
 """
 
 DEFAULT_FEEDBACK = {
@@ -37,19 +42,14 @@ DEFAULT_FEEDBACK = {
 
 
 def _clean_json(text: str) -> str:
-    """
-    Cleans markdown formatting and extracts JSON safely.
-    """
     text = text.strip()
 
-    # Remove markdown code blocks
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
 
-    # Extract first JSON object
     match = re.search(r"\{[\s\S]*\}", text)
     if match:
         return match.group()
@@ -67,6 +67,8 @@ def generate_feedback(
     scores = analysis.get("scores", {})
 
     prompt = f"""
+{SYSTEM_PROMPT}
+
 Mode: {feedback_mode.upper()}
 
 Interview Question:
@@ -93,20 +95,29 @@ Return ONLY valid JSON in this format:
 }}
 """
 
-    for attempt in range(2):  # retry once if network or parsing fails
+    for attempt in range(2):
         try:
-            response = co.chat(
-                model="command-a-03-2025",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.4
+            response = requests.post(
+                MODEL_URL,
+                headers=headers,
+                json={
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": 800,
+                        "temperature": 0.4,
+                        "return_full_text": False
+                    }
+                },
+                timeout=90
             )
 
-            raw_text = response.message.content[0].text
-            cleaned = _clean_json(raw_text)
+            result = response.json()
 
+            if isinstance(result, dict) and "error" in result:
+                raise Exception(result["error"])
+
+            raw_text = result[0]["generated_text"]
+            cleaned = _clean_json(raw_text)
             parsed = json.loads(cleaned)
 
             return {
@@ -117,14 +128,12 @@ Return ONLY valid JSON in this format:
                 "verdict": parsed.get("verdict", "Undetermined"),
             }
 
-        except (RemoteProtocolError, HTTPError):
-            time.sleep(1)
-            continue
+        except Exception as e:
+            print("FEEDBACK ERROR:", e)
+            if attempt == 1:
+                break
+            time.sleep(2)
 
-        except Exception:
-            break
-
-    # Final fallback (only if both attempts fail)
     fallback = DEFAULT_FEEDBACK.copy()
     fallback["ideal_answer"] = answer
     return fallback

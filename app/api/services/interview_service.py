@@ -1,18 +1,18 @@
-from cohere import ClientV2
 import os
+import requests
 from dotenv import load_dotenv
 from typing import List, Dict
 
 load_dotenv()
 
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-COHERE_MODEL = os.getenv("COHERE_MODEL", "command-a-03-2025")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
 
-if not COHERE_API_KEY:
-    raise ValueError("COHERE_API_KEY not found in environment variables")
+MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
-co = ClientV2(api_key=COHERE_API_KEY)
-
+headers = {
+    "Authorization": f"Bearer {HF_API_TOKEN}"
+}
 
 SYSTEM_PROMPT = """
 You are a professional technical interviewer.
@@ -30,7 +30,6 @@ Return only the question text.
 """
 
 
-# Basic fallback questions if AI fails
 FALLBACK_QUESTIONS = {
     "Software Engineer": [
         "Can you describe a project you worked on and your specific role in it?",
@@ -45,72 +44,66 @@ FALLBACK_QUESTIONS = {
 }
 
 
-def _build_messages(role: str, experience_level: str, history: List[Dict]) -> List[Dict]:
-    """
-    Build conversation history for Cohere chat.
-    """
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        },
-        {
-            "role": "user",
-            "content": f"""
+def _build_prompt(role: str, experience_level: str, history: List[Dict]) -> str:
+    conversation = ""
+
+    for turn in history[-3:]:
+        if "question" in turn and "answer" in turn:
+            conversation += f"\nInterviewer: {turn['question']}\n"
+            conversation += f"Candidate: {turn['answer']}\n"
+
+    return f"""
+{SYSTEM_PROMPT}
+
 Interview Context:
 Role: {role}
 Experience Level: {experience_level}
+
+Previous Conversation:
+{conversation}
+
+Ask the next interview question.
+Only return the question.
 """
-        }
-    ]
-
-    # Only use last 3 exchanges to limit token usage
-    for turn in history[-3:]:
-        if "question" in turn and "answer" in turn:
-            messages.append({"role": "assistant", "content": turn["question"]})
-            messages.append({"role": "user", "content": turn["answer"]})
-
-    messages.append({
-        "role": "user",
-        "content": "Ask the next interview question. Only return the question."
-    })
-
-    return messages
 
 
 def _fallback_question(role: str, history: List[Dict]) -> str:
-    """
-    Return a fallback question if AI fails.
-    """
     questions = FALLBACK_QUESTIONS.get(role, FALLBACK_QUESTIONS["default"])
     index = len(history) % len(questions)
     return questions[index]
 
 
 def generate_question(role: str, experience_level: str, history: List[Dict]) -> str:
-    """
-    Generate next interview question using Cohere.
-    Safe version with fallback handling.
-    """
+
+    prompt = _build_prompt(role, experience_level, history)
 
     try:
-        messages = _build_messages(role, experience_level, history)
-
-        response = co.chat(
-            model=COHERE_MODEL,
-            messages=messages,
-            temperature=0.6
+        response = requests.post(
+            MODEL_URL,
+            headers=headers,
+            json={
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 200,
+                    "temperature": 0.6,
+                    "return_full_text": False
+                }
+            },
+            timeout=90
         )
 
-        question = response.message.content[0].text.strip()
+        result = response.json()
 
-        # Basic validation
+        if isinstance(result, dict) and "error" in result:
+            raise Exception(result["error"])
+
+        question = result[0]["generated_text"].strip()
+
         if not question or len(question) < 10:
             return _fallback_question(role, history)
 
         return question
 
     except Exception as e:
-        # Log error in production (replace with logging system later)
         print(f"[ERROR] Question generation failed: {e}")
         return _fallback_question(role, history)
