@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
-HF_MODEL = os.getenv("HF_MODEL") or "google/gemma-2b-it"
+HF_MODEL = os.getenv("HF_MODEL") or "mistralai/Mistral-7B-Instruct-v0.2"
 
 MODEL_URL = "https://router.huggingface.co/v1/chat/completions"
 
