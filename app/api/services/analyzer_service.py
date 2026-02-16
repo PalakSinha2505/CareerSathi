@@ -108,15 +108,33 @@ Return ONLY valid JSON in this format:
                 timeout=90
             )
 
+            print("HF STATUS:", response.status_code)
+            print("HF RAW:", response.text)
+
+            if response.status_code != 200:
+                raise Exception(f"HF API error {response.status_code}: {response.text}")
+
+            if not response.text.strip():
+                raise Exception("Empty response from HuggingFace")
+
             result = response.json()
 
-            # HuggingFace returns list format
-            raw_text = result[0]["generated_text"]
+            # Handle both router response formats
+            if isinstance(result, list):
+                raw_text = result[0].get("generated_text", "")
+            elif isinstance(result, dict):
+                raw_text = result.get("generated_text", "")
+            else:
+                raise Exception("Unexpected HF response format")
+
+            if not raw_text:
+                raise Exception("No generated_text in response")
 
             cleaned = _clean_json(raw_text)
             parsed = json.loads(cleaned)
 
             return parsed
+
 
         except Exception as e:
             print("REAL ERROR:", e)
