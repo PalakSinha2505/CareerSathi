@@ -1,19 +1,19 @@
-from cohere import ClientV2
-import os
 import json
-from dotenv import load_dotenv
+import requests
 import time
-from httpx import RemoteProtocolError, HTTPError
+import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-MODEL_NAME = os.getenv("COHERE_MODEL")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+HF_MODEL = os.getenv("HF_MODEL")
 
-if not COHERE_API_KEY:
-    raise ValueError("COHERE_API_KEY not found in environment variables.")
+MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
-co = ClientV2(api_key=COHERE_API_KEY)
+headers = {
+    "Authorization": f"Bearer {HF_API_TOKEN}"
+}
 
 SYSTEM_PROMPT = """
 You are an expert interview evaluator.
@@ -29,7 +29,8 @@ Focus on HOW the answer is delivered rather than technical correctness.
 Be strict but fair.
 Do NOT give identical scores unless truly deserved.
 Do NOT give 7+ unless the answer is structured and confident.
-Return ONLY valid JSON.
+Return raw JSON only.
+Do NOT wrap JSON in markdown.
 """
 
 DEFAULT_RESPONSE = {
@@ -63,6 +64,8 @@ def _clean_json(raw_text: str):
 def analyze_answer(question: str, answer: str, role: str, experience_level: str) -> dict:
 
     prompt = f"""
+{SYSTEM_PROMPT}
+
 Interview Context:
 Role: {role}
 Experience Level: {experience_level}
@@ -91,22 +94,25 @@ Return ONLY valid JSON in this format:
 
     for attempt in range(2):
         try:
-            print("MODEL:", MODEL_NAME)
-            print("KEY PRESENT:", bool(COHERE_API_KEY))
-
-            response = co.chat(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3
+            response = requests.post(
+                MODEL_URL,
+                headers=headers,
+                json={
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": 600,
+                        "temperature": 0.3,
+                        "return_full_text": False
+                    }
+                },
+                timeout=90
             )
 
-            print("RAW COHERE RESPONSE:")
-            print(response)
+            result = response.json()
 
-            raw_text = response.message.content[0].text
+            # HuggingFace returns list format
+            raw_text = result[0]["generated_text"]
+
             cleaned = _clean_json(raw_text)
             parsed = json.loads(cleaned)
 
@@ -117,5 +123,3 @@ Return ONLY valid JSON in this format:
             if attempt == 1:
                 return DEFAULT_RESPONSE
             time.sleep(1)
-
-
