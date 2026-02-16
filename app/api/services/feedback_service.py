@@ -1,6 +1,5 @@
 import os
 import json
-import re
 import time
 import requests
 from dotenv import load_dotenv
@@ -18,20 +17,32 @@ headers = {
 }
 
 SYSTEM_PROMPT = """
-You are a senior technical interviewer and career mentor with high hiring standards.
+You are a senior technical interviewer and career mentor.
 
-Your job is NOT to be polite.
-Your job is to be honest, precise, and useful.
+You are generating FEEDBACK — NOT evaluation scores.
 
-You must:
-- Explicitly call out vague, weak, or careless phrasing
-- Explain how specific parts reduce clarity, confidence, or credibility
-- Focus on communication quality and structure
-- Give advice the candidate can immediately apply
+Do NOT return:
+- scores
+- clarity
+- communication
+- confidence
+- structure
+- english
+
+Return ONLY this JSON structure:
+
+{
+  "verbal_feedback": "string",
+  "key_issues": ["string"],
+  "actionable_tips": ["string"],
+  "ideal_answer": "string",
+  "verdict": "Strong Hire / Hire / Borderline / No Hire"
+}
+
+Rules:
+- Do NOT wrap JSON in markdown.
+- Do NOT include explanations outside JSON.
 - Ensure newline characters inside strings are escaped using \\n.
-
-Return raw JSON only.
-Do NOT wrap JSON in markdown.
 """
 
 DEFAULT_FEEDBACK = {
@@ -44,9 +55,17 @@ DEFAULT_FEEDBACK = {
 
 
 def _clean_json(text: str) -> str:
+    """
+    Extracts the first valid JSON object from model output safely.
+    Removes markdown fences and trims incomplete endings.
+    """
+
+    if not text:
+        return ""
+
     text = text.strip()
 
-    # Remove markdown fences
+    # Remove markdown fences if present
     if text.startswith("```"):
         parts = text.split("```")
         if len(parts) >= 2:
@@ -55,12 +74,14 @@ def _clean_json(text: str) -> str:
             text = text[4:]
         text = text.strip()
 
-    # Extract JSON block
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
-        text = match.group()
+    # Extract JSON boundaries manually (safer than regex)
+    start = text.find("{")
+    end = text.rfind("}")
 
-    # Remove control characters
+    if start != -1 and end != -1 and end > start:
+        text = text[start:end + 1]
+
+    # Remove problematic control characters
     text = text.replace("\r", "")
     text = text.replace("\t", " ")
 
@@ -87,15 +108,7 @@ Confidence: {scores.get("confidence")}
 Structure: {scores.get("structure")}
 English: {scores.get("english")}
 
-Return ONLY valid JSON in this format:
-
-{{
-  "verbal_feedback": "Detailed paragraph explaining evaluation",
-  "key_issues": ["issue1", "issue2", "issue3"],
-  "actionable_tips": ["tip1", "tip2", "tip3"],
-  "ideal_answer": "Improved professional version of answer",
-  "verdict": "Strong Hire / Hire / Borderline / No Hire"
-}}
+Return ONLY valid JSON.
 """
 
     for attempt in range(2):
@@ -109,22 +122,43 @@ Return ONLY valid JSON in this format:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
-                    "max_tokens": 800,
-                    "temperature": 0.4
+                    # Reduced to avoid cutoff
+                    "max_tokens": 550,
+                    "temperature": 0.3
                 },
                 timeout=90
             )
+
+            print("HF STATUS:", response.status_code)
+            print("HF RAW:", response.text)
 
             if response.status_code != 200:
                 raise Exception(f"HF API error {response.status_code}: {response.text}")
 
             result = response.json()
-            raw_text = result["choices"][0]["message"]["content"]
+
+            choice = result["choices"][0]
+            raw_text = choice["message"]["content"]
+
+            # If model was cut due to length, retry
+            if choice.get("finish_reason") == "length":
+                raise Exception("Model output truncated (length limit reached)")
 
             cleaned = _clean_json(raw_text)
 
-            # 🔥 strict=False prevents crash
             parsed = json.loads(cleaned, strict=False)
+
+            # Final structural validation
+            required_keys = [
+                "verbal_feedback",
+                "key_issues",
+                "actionable_tips",
+                "ideal_answer",
+                "verdict"
+            ]
+
+            if not all(k in parsed for k in required_keys):
+                raise Exception("Missing required JSON fields")
 
             return parsed
 
