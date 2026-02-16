@@ -8,10 +8,11 @@ load_dotenv()
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 HF_MODEL = os.getenv("HF_MODEL") or "google/gemma-2b-it"
 
-MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+MODEL_URL = "https://router.huggingface.co/v1/chat/completions"
 
 headers = {
-    "Authorization": f"Bearer {HF_API_TOKEN}"
+    "Authorization": f"Bearer {HF_API_TOKEN}",
+    "Content-Type": "application/json"
 }
 
 SYSTEM_PROMPT = """
@@ -28,7 +29,6 @@ Rules:
 
 Return only the question text.
 """
-
 
 FALLBACK_QUESTIONS = {
     "Software Engineer": [
@@ -53,8 +53,6 @@ def _build_prompt(role: str, experience_level: str, history: List[Dict]) -> str:
             conversation += f"Candidate: {turn['answer']}\n"
 
     return f"""
-{SYSTEM_PROMPT}
-
 Interview Context:
 Role: {role}
 Experience Level: {experience_level}
@@ -75,22 +73,20 @@ def _fallback_question(role: str, history: List[Dict]) -> str:
 
 def generate_question(role: str, experience_level: str, history: List[Dict]) -> str:
 
-    prompt = _build_prompt(role, experience_level, history)
+    user_prompt = _build_prompt(role, experience_level, history)
 
     try:
         response = requests.post(
             MODEL_URL,
             headers=headers,
             json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": 200,
-                    "temperature": 0.6,
-                    "return_full_text": False
-                },
-                "options": {
-                    "wait_for_model": True
-                }   
+                "model": HF_MODEL,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 200,
+                "temperature": 0.6
             },
             timeout=90
         )
@@ -99,11 +95,7 @@ def generate_question(role: str, experience_level: str, history: List[Dict]) -> 
             raise Exception(f"HF API error {response.status_code}: {response.text}")
 
         result = response.json()
-
-        if isinstance(result, dict) and "error" in result:
-            raise Exception(result["error"])
-
-        question = result[0]["generated_text"].strip()
+        question = result["choices"][0]["message"]["content"].strip()
 
         if not question or len(question) < 10:
             return _fallback_question(role, history)

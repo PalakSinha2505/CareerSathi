@@ -10,10 +10,11 @@ load_dotenv()
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 HF_MODEL = os.getenv("HF_MODEL") or "google/gemma-2b-it"
 
-MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+MODEL_URL = "https://router.huggingface.co/v1/chat/completions"
 
 headers = {
-    "Authorization": f"Bearer {HF_API_TOKEN}"
+    "Authorization": f"Bearer {HF_API_TOKEN}",
+    "Content-Type": "application/json"
 }
 
 SYSTEM_PROMPT = """
@@ -57,18 +58,11 @@ def _clean_json(text: str) -> str:
     return text
 
 
-def generate_feedback(
-    question: str,
-    answer: str,
-    analysis: dict,
-    feedback_mode: str = "harsh"
-) -> dict:
+def generate_feedback(question, answer, analysis, feedback_mode="harsh"):
 
     scores = analysis.get("scores", {})
 
-    prompt = f"""
-{SYSTEM_PROMPT}
-
+    user_prompt = f"""
 Mode: {feedback_mode.upper()}
 
 Interview Question:
@@ -101,15 +95,13 @@ Return ONLY valid JSON in this format:
                 MODEL_URL,
                 headers=headers,
                 json={
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_new_tokens": 800,
-                        "temperature": 0.4,
-                        "return_full_text": False
-                    },
-                    "options": {
-                        "wait_for_model": True
-                    }
+                    "model": HF_MODEL,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": 800,
+                    "temperature": 0.4
                 },
                 timeout=90
             )
@@ -118,21 +110,12 @@ Return ONLY valid JSON in this format:
                 raise Exception(f"HF API error {response.status_code}: {response.text}")
 
             result = response.json()
+            raw_text = result["choices"][0]["message"]["content"]
 
-            if isinstance(result, dict) and "error" in result:
-                raise Exception(result["error"])
-
-            raw_text = result[0]["generated_text"]
             cleaned = _clean_json(raw_text)
             parsed = json.loads(cleaned)
 
-            return {
-                "verbal_feedback": parsed.get("verbal_feedback", ""),
-                "key_issues": parsed.get("key_issues", []),
-                "actionable_tips": parsed.get("actionable_tips", []),
-                "ideal_answer": parsed.get("ideal_answer", ""),
-                "verdict": parsed.get("verdict", "Undetermined"),
-            }
+            return parsed
 
         except Exception as e:
             print("FEEDBACK ERROR:", e)

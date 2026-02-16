@@ -9,11 +9,11 @@ load_dotenv()
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 HF_MODEL = os.getenv("HF_MODEL") or "google/gemma-2b-it"
 
-MODEL_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-
+MODEL_URL = "https://router.huggingface.co/v1/chat/completions"
 
 headers = {
-    "Authorization": f"Bearer {HF_API_TOKEN}"
+    "Authorization": f"Bearer {HF_API_TOKEN}",
+    "Content-Type": "application/json"
 }
 
 SYSTEM_PROMPT = """
@@ -64,9 +64,7 @@ def _clean_json(raw_text: str):
 
 def analyze_answer(question: str, answer: str, role: str, experience_level: str) -> dict:
 
-    prompt = f"""
-{SYSTEM_PROMPT}
-
+    user_prompt = f"""
 Interview Context:
 Role: {role}
 Experience Level: {experience_level}
@@ -99,12 +97,13 @@ Return ONLY valid JSON in this format:
                 MODEL_URL,
                 headers=headers,
                 json={
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_new_tokens": 600,
-                        "temperature": 0.3,
-                        "return_full_text": False
-                    }
+                    "model": HF_MODEL,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": 600,
+                    "temperature": 0.3
                 },
                 timeout=90
             )
@@ -115,27 +114,13 @@ Return ONLY valid JSON in this format:
             if response.status_code != 200:
                 raise Exception(f"HF API error {response.status_code}: {response.text}")
 
-            if not response.text.strip():
-                raise Exception("Empty response from HuggingFace")
-
             result = response.json()
-
-            # Handle both router response formats
-            if isinstance(result, list):
-                raw_text = result[0].get("generated_text", "")
-            elif isinstance(result, dict):
-                raw_text = result.get("generated_text", "")
-            else:
-                raise Exception("Unexpected HF response format")
-
-            if not raw_text:
-                raise Exception("No generated_text in response")
+            raw_text = result["choices"][0]["message"]["content"]
 
             cleaned = _clean_json(raw_text)
             parsed = json.loads(cleaned)
 
             return parsed
-
 
         except Exception as e:
             print("REAL ERROR:", e)
