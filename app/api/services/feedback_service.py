@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
-HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
+HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
 
 MODEL_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}"
 
