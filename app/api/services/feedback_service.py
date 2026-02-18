@@ -33,7 +33,7 @@ Do NOT return:
 Return ONLY this JSON structure:
 
 {
-  "verbal_feedback": "string",
+  "verbal_feedback": "Concise but impactful paragraph (5-8 sentences maximum)",
   "key_issues": ["string"],
   "actionable_tips": ["string"],
   "ideal_answer": "string",
@@ -45,6 +45,8 @@ Rules:
 - Do NOT include explanations outside JSON.
 - Ensure newline characters inside strings are escaped using \\n.
 - If you generate invalid JSON, the response will be discarded.
+- Keep responses concise and avoid unnecessary elaboration.
+
 """
 
 DEFAULT_FEEDBACK = {
@@ -144,8 +146,11 @@ Return ONLY valid JSON.
             raw_text = choice["message"]["content"]
 
             # Retry if truncated
-            if choice.get("finish_reason") == "length":
-                raise Exception("Model output truncated")
+            finish_reason = choice.get("finish_reason")
+
+            if finish_reason == "length":
+                print("WARNING: Model output reached token limit. Attempting recovery...")
+
 
             json_text = _extract_json(raw_text)
 
