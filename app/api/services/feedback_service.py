@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import requests
 from dotenv import load_dotenv
 
@@ -43,6 +44,7 @@ Rules:
 - Do NOT wrap JSON in markdown.
 - Do NOT include explanations outside JSON.
 - Ensure newline characters inside strings are escaped using \\n.
+- If you generate invalid JSON, the response will be discarded.
 """
 
 DEFAULT_FEEDBACK = {
@@ -54,38 +56,33 @@ DEFAULT_FEEDBACK = {
 }
 
 
-def _clean_json(text: str) -> str:
+def _extract_json(text: str):
     """
-    Extracts the first valid JSON object from model output safely.
-    Removes markdown fences and trims incomplete endings.
+    Extract first valid JSON object using balanced brace tracking.
+    Safer than naive slicing.
     """
 
     if not text:
-        return ""
-
-    text = text.strip()
+        return None
 
     # Remove markdown fences if present
-    if text.startswith("```"):
-        parts = text.split("```")
-        if len(parts) >= 2:
-            text = parts[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip()
+    text = re.sub(r"```json|```", "", text).strip()
 
-    # Extract JSON boundaries manually (safer than regex)
-    start = text.find("{")
-    end = text.rfind("}")
+    stack = []
+    start_index = None
 
-    if start != -1 and end != -1 and end > start:
-        text = text[start:end + 1]
+    for i, char in enumerate(text):
+        if char == "{":
+            if not stack:
+                start_index = i
+            stack.append("{")
+        elif char == "}":
+            if stack:
+                stack.pop()
+                if not stack and start_index is not None:
+                    return text[start_index:i + 1]
 
-    # Remove problematic control characters
-    text = text.replace("\r", "")
-    text = text.replace("\t", " ")
-
-    return text
+    return None
 
 
 def generate_feedback(question, answer, analysis, feedback_mode="harsh"):
@@ -122,33 +119,42 @@ Return ONLY valid JSON.
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
-                    # Reduced to avoid cutoff
-                    "max_tokens": 550,
+                    "max_tokens": 800,
                     "temperature": 0.3
                 },
                 timeout=90
             )
 
             print("HF STATUS:", response.status_code)
-            print("HF RAW:", response.text)
 
             if response.status_code != 200:
                 raise Exception(f"HF API error {response.status_code}: {response.text}")
 
             result = response.json()
 
+            # Validate structure
+            if "choices" not in result or not result["choices"]:
+                raise Exception("No choices returned from model")
+
             choice = result["choices"][0]
+
+            if "message" not in choice or "content" not in choice["message"]:
+                raise Exception("Malformed response structure")
+
             raw_text = choice["message"]["content"]
 
-            # If model was cut due to length, retry
+            # Retry if truncated
             if choice.get("finish_reason") == "length":
-                raise Exception("Model output truncated (length limit reached)")
+                raise Exception("Model output truncated")
 
-            cleaned = _clean_json(raw_text)
+            json_text = _extract_json(raw_text)
 
-            parsed = json.loads(cleaned, strict=False)
+            if not json_text:
+                raise Exception("No JSON found in model output")
 
-            # Final structural validation
+            parsed = json.loads(json_text)
+
+            # Structural validation
             required_keys = [
                 "verbal_feedback",
                 "key_issues",
@@ -160,10 +166,17 @@ Return ONLY valid JSON.
             if not all(k in parsed for k in required_keys):
                 raise Exception("Missing required JSON fields")
 
+            # Type validation
+            if not isinstance(parsed["key_issues"], list):
+                raise Exception("key_issues must be a list")
+
+            if not isinstance(parsed["actionable_tips"], list):
+                raise Exception("actionable_tips must be a list")
+
             return parsed
 
         except Exception as e:
-            print("FEEDBACK ERROR:", e)
+            print("FEEDBACK ERROR:", str(e))
             if attempt == 1:
                 break
             time.sleep(2)
