@@ -27,7 +27,7 @@ app.add_middleware(
 
 # ---------------- ROUTES ----------------
 app.include_router(interview.router)
-app.include_router(feedback.router)
+app.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 app.include_router(auth.router)
 app.include_router(user.router)
 
