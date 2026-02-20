@@ -131,7 +131,7 @@ Return ONLY valid JSON in this format:
 
             cleaned = _clean_json(raw_text)
 
-            # 🔥 strict=False prevents control character crash
+            # strict=False prevents control character crash
             parsed = json.loads(cleaned, strict=False)
 
             return parsed
