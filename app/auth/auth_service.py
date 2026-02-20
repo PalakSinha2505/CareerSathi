@@ -1,5 +1,6 @@
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from app.db.models import User
 from app.auth.auth_utils import create_access_token
 
@@ -15,10 +16,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def register_user(db: Session, name: str, email: str, password: str):
-
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
-        raise Exception("Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
 
     user = User(
         name=name,
@@ -34,13 +37,18 @@ def register_user(db: Session, name: str, email: str, password: str):
 
 
 def login_user(db: Session, email: str, password: str):
-
     user = db.query(User).filter(User.email == email).first()
     if not user:
-        raise Exception("Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
 
     if not verify_password(password, user.password_hash):
-        raise Exception("Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
 
     token = create_access_token({"sub": str(user.id)})
 

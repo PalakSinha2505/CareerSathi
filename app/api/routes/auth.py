@@ -16,7 +16,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         password=user.password
     )
 
-    token = login_user(
+    db_user, token = login_user(
         db=db,
         email=user.email,
         password=user.password
@@ -31,7 +31,6 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         "access_token": token,
         "token_type": "bearer"
     }
-
 
 
 @router.post("/login")
@@ -51,4 +50,3 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         "access_token": token,
         "token_type": "bearer"
     }
-
