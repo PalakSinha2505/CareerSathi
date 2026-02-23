@@ -12,14 +12,13 @@ app = FastAPI(
 
 # ---------------- CORS CONFIG ----------------
 origins = [
-    "http://localhost:5173",  # Vite frontend (dev)
-    "http://localhost:3000",  # optional (if you ever use it)
-    "https://careersathi-rm5f.onrender.com",  # backend domain
+    "http://localhost:5173",  # Vite dev
+    "https://careersathi-rm5f.onrender.com",  # production frontend (if hosted)
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TEMPORARY FOR DEBUG
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
