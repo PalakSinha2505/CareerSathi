@@ -34,8 +34,8 @@ class QuestionAnswer(Base):
     interview_id = Column(Integer, ForeignKey("interviews.id"))
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
-    analysis = Column(Text)     
-    feedback = Column(Text)      
+    analysis = Column(JSON)     
+    feedback = Column(JSON)      
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     interview = relationship("Interview", back_populates="answers")    
