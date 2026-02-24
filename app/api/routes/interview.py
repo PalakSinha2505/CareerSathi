@@ -280,3 +280,38 @@ def get_analytics(
         "roles_breakdown": roles_breakdown,
         "questions_breakdown": questions_breakdown,
     }
+
+# =====================================================
+# 5️⃣ Single Interview Analytics
+# =====================================================
+@router.get("/{interview_id}/analytics")
+def get_single_interview_analytics(
+    interview_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    interview = (
+        db.query(Interview)
+        .filter(Interview.id == interview_id, Interview.user_id == current_user.id)
+        .first()
+    )
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    responses = interview.answers
+    question_breakdown = {
+        qa.question: {
+            "feedback_samples": [qa.feedback] if qa.feedback else [],
+            "attempts": 1,
+        }
+        for qa in responses
+    }
+
+    return {
+        "interview_id": interview.id,
+        "role": interview.role,
+        "level": interview.level,
+        "score": interview.score,
+        "total_questions": len(responses),
+        "question_breakdown": question_breakdown,
+    }
