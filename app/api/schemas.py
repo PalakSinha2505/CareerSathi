@@ -32,7 +32,7 @@ class InterviewResponse(BaseModel):
     id: int
     role: str
     level: str
-    score: Optional[int] = None
+    score: Optional[Any] = None
     created_at: Optional[str] = None
     responses: List[AnswerResponse] = Field(default_factory=list)
 
