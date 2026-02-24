@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Annotated
+from typing import List, Optional, Annotated, Any
 
 # ----------------------------
 # Request Schemas
@@ -24,8 +24,8 @@ class InterviewRequest(BaseModel):
 class AnswerResponse(BaseModel):
     question: str
     answer: str
-    analysis: Optional[str] = None
-    feedback: Optional[str] = None
+    analysis: Optional[Any] = None
+    feedback: Optional[Any] = None
 
 
 class InterviewResponse(BaseModel):
