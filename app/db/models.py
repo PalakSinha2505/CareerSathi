@@ -20,7 +20,7 @@ class Interview(Base):
     id = Column(Integer, primary_key=True, index=True)
     role = Column(String, nullable=False)
     level = Column(String, nullable=False)
-    score = Column(Integer)
+    score = Column(JSON)
     user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
