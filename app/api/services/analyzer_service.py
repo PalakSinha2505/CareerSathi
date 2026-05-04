@@ -133,6 +133,9 @@ Return ONLY valid JSON in this format:
 
             # strict=False prevents control character crash
             parsed = json.loads(cleaned, strict=False)
+            # Ensure required fields exist
+            if "scores" not in parsed:
+                return DEFAULT_RESPONSE
 
             return parsed
 

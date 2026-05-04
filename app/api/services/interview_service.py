@@ -17,21 +17,31 @@ headers = {
 }
 
 SYSTEM_PROMPT = """
-You are a professional interviewer.
+You are a STRICT professional interviewer.
 
-STRICT RULES:
+CRITICAL RULES:
 - Ask ONLY ONE question.
-- NEVER repeat a previous question.
-- DO NOT ask generic HR questions repeatedly (like intro, achievements, etc).
-- Focus on ROLE-SPECIFIC and SKILL-BASED questions.
-- Progressively increase difficulty.
-- Use previous answers to guide next question.
-- Avoid vague or broad questions.
-- Be specific and technical where possible.
+- NEVER repeat any previous question.
+- NO generic HR questions unless it's the first question.
+- Questions MUST be ROLE-SPECIFIC and TECHNICAL wherever possible.
+- Increase difficulty gradually.
+- Avoid vague questions like:
+  - "Tell me about yourself"
+  - "What are your strengths?"
+  - "Describe a challenge"
+- Focus on REAL interview-style grilling questions.
 
-OUTPUT FORMAT:
+GOOD EXAMPLES:
+- "Explain how React's reconciliation works."
+- "How would you design a scalable REST API?"
+- "What indexing strategy would you use for a large dataset?"
+
+BAD EXAMPLES:
+- "Tell me about yourself"
+- "What is your biggest achievement?"
+
+OUTPUT:
 Return ONLY the question text.
-No explanations. No comments.
 """
 
 FALLBACK_QUESTIONS = {
@@ -58,17 +68,25 @@ def _build_prompt(role: str, experience_level: str, history: List[Dict]) -> str:
             conversation += f"Candidate: {turn['answer']}\n"
 
     return f"""
-Interview Context:
-Role: {role}
-Experience Level: {experience_level}
+You are conducting a REALISTIC TECHNICAL INTERVIEW.
 
-DO NOT REPEAT THESE QUESTIONS:
+ROLE: {role}
+EXPERIENCE LEVEL: {experience_level}
+
+STRICT INSTRUCTIONS:
+- Ask ROLE-SPECIFIC questions for {role}
+- Avoid HR/general questions
+- Ask practical, scenario-based or technical questions
+- Increase difficulty gradually
+- DO NOT repeat questions
+
+ALREADY ASKED QUESTIONS:
 {asked_questions}
 
-Previous Conversation:
+CONVERSATION:
 {conversation}
 
-Generate the NEXT UNIQUE and ROLE-SPECIFIC question.
+Now ask the NEXT QUESTION.
 """
 
 def _fallback_question(role: str, history: List[Dict]) -> str:
@@ -76,38 +94,49 @@ def _fallback_question(role: str, history: List[Dict]) -> str:
 
     ROLE_QUESTIONS = {
         "frontend developer": [
-            "Explain the difference between useEffect and useLayoutEffect.",
-            "How does the virtual DOM improve performance?",
-            "What are React hooks and why are they used?",
-            "Explain CSS specificity with examples.",
-            "How do you optimize frontend performance?"
+            "Explain how React handles re-rendering and how you optimize it.",
+            "What is the difference between controlled and uncontrolled components?",
+            "How would you improve the performance of a slow React app?",
+            "Explain event delegation in JavaScript.",
+            "How do you manage global state in large frontend apps?"
         ],
         "backend developer": [
-            "What is the difference between REST and GraphQL?",
-            "Explain database indexing and its importance.",
-            "How do you handle authentication in APIs?",
-            "What are microservices and when would you use them?",
-            "Explain caching strategies in backend systems."
+            "How would you design a scalable authentication system?",
+            "Explain database normalization with an example.",
+            "How do you handle concurrency in backend systems?",
+            "What are rate limiting strategies in APIs?",
+            "Explain how caching improves backend performance."
         ],
         "software developer": [
-            "Explain time complexity with an example.",
-            "What is a deadlock and how do you prevent it?",
-            "Difference between stack and heap memory?",
-            "Explain OOP principles with real examples.",
-            "What is multithreading?"
+            "Explain time complexity of quicksort and when it degrades.",
+            "What is a race condition and how do you prevent it?",
+            "Explain memory management in your preferred language.",
+            "How would you debug a production issue?",
+            "Explain multithreading vs multiprocessing."
+        ],
+        "hr": [
+            "How do you handle conflict resolution between employees?",
+            "What metrics do you use to measure employee performance?",
+            "How do you design an effective hiring process?",
+            "Describe a difficult HR case you handled.",
+            "How do you improve employee retention?"
+        ],
+        "management": [
+            "How do you prioritize tasks in a high-pressure environment?",
+            "Explain a leadership challenge you faced.",
+            "How do you handle underperforming team members?",
+            "What strategies do you use for decision-making?",
+            "How do you manage cross-functional teams?"
         ],
         "default": [
-            "Describe a challenging problem you solved recently.",
-            "How do you approach learning a new skill?",
-            "Explain a project where you made a significant impact.",
-            "What is your problem-solving approach?",
-            "How do you handle failure?"
+            "Explain a recent complex problem you solved.",
+            "How do you approach learning a new technical skill?",
+            "Describe a situation where you had to make a tough decision.",
         ]
     }
 
     questions = ROLE_QUESTIONS.get(role, ROLE_QUESTIONS["default"])
 
-    # FIX: avoid repetition
     asked = set([h["question"] for h in history if "question" in h])
     available = [q for q in questions if q not in asked]
 
