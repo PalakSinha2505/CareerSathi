@@ -2,6 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from typing import List, Dict
+import random
 
 load_dotenv()
 
@@ -16,18 +17,21 @@ headers = {
 }
 
 SYSTEM_PROMPT = """
-You are a professional technical interviewer.
+You are a professional interviewer.
 
-Rules:
-- Ask one clear, concise question at a time.
-- Do not provide feedback.
-- Do not explain anything.
-- Only return the next interview question.
-- Keep questions relevant to the role and experience level.
-- Adjust difficulty based on previous answers.
-- Maintain a realistic interview tone.
+STRICT RULES:
+- Ask ONLY ONE question.
+- NEVER repeat a previous question.
+- DO NOT ask generic HR questions repeatedly (like intro, achievements, etc).
+- Focus on ROLE-SPECIFIC and SKILL-BASED questions.
+- Progressively increase difficulty.
+- Use previous answers to guide next question.
+- Avoid vague or broad questions.
+- Be specific and technical where possible.
 
-Return only the question text.
+OUTPUT FORMAT:
+Return ONLY the question text.
+No explanations. No comments.
 """
 
 FALLBACK_QUESTIONS = {
@@ -45,9 +49,10 @@ FALLBACK_QUESTIONS = {
 
 
 def _build_prompt(role: str, experience_level: str, history: List[Dict]) -> str:
-    conversation = ""
+    asked_questions = "\n".join([f"- {h['question']}" for h in history if "question" in h])
 
-    for turn in history[-3:]:
+    conversation = ""
+    for turn in history[-5:]:
         if "question" in turn and "answer" in turn:
             conversation += f"\nInterviewer: {turn['question']}\n"
             conversation += f"Candidate: {turn['answer']}\n"
@@ -57,18 +62,59 @@ Interview Context:
 Role: {role}
 Experience Level: {experience_level}
 
+DO NOT REPEAT THESE QUESTIONS:
+{asked_questions}
+
 Previous Conversation:
 {conversation}
 
-Ask the next interview question.
-Only return the question.
+Generate the NEXT UNIQUE and ROLE-SPECIFIC question.
 """
 
-
 def _fallback_question(role: str, history: List[Dict]) -> str:
-    questions = FALLBACK_QUESTIONS.get(role, FALLBACK_QUESTIONS["default"])
-    index = len(history) % len(questions)
-    return questions[index]
+    role = role.lower()
+
+    ROLE_QUESTIONS = {
+        "frontend developer": [
+            "Explain the difference between useEffect and useLayoutEffect.",
+            "How does the virtual DOM improve performance?",
+            "What are React hooks and why are they used?",
+            "Explain CSS specificity with examples.",
+            "How do you optimize frontend performance?"
+        ],
+        "backend developer": [
+            "What is the difference between REST and GraphQL?",
+            "Explain database indexing and its importance.",
+            "How do you handle authentication in APIs?",
+            "What are microservices and when would you use them?",
+            "Explain caching strategies in backend systems."
+        ],
+        "software developer": [
+            "Explain time complexity with an example.",
+            "What is a deadlock and how do you prevent it?",
+            "Difference between stack and heap memory?",
+            "Explain OOP principles with real examples.",
+            "What is multithreading?"
+        ],
+        "default": [
+            "Describe a challenging problem you solved recently.",
+            "How do you approach learning a new skill?",
+            "Explain a project where you made a significant impact.",
+            "What is your problem-solving approach?",
+            "How do you handle failure?"
+        ]
+    }
+
+    questions = ROLE_QUESTIONS.get(role, ROLE_QUESTIONS["default"])
+
+    # FIX: avoid repetition
+    asked = set([h["question"] for h in history if "question" in h])
+    available = [q for q in questions if q not in asked]
+
+    if not available:
+        available = questions
+
+    return random.choice(available)
 
 
 def generate_question(role: str, experience_level: str, history: List[Dict]) -> str:
