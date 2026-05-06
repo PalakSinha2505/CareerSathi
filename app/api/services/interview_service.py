@@ -163,14 +163,19 @@ def generate_question(role: str, experience_level: str, history: List[Dict]) -> 
                 "max_tokens": 200,
                 "temperature": 0.6
             },
-            timeout=15
+            timeout=30
         )
 
         if response.status_code != 200:
             raise Exception(f"HF API error {response.status_code}: {response.text}")
 
         result = response.json()
-        question = result["choices"][0]["message"]["content"].strip()
+        try:
+            question = result["choices"][0]["message"]["content"].strip()
+            print("Generated Question:", question)
+        except Exception as e:
+            print("PARSE ERROR:", e)
+            return _fallback_question(role, history)
 
         if not question or len(question) < 10:
             return _fallback_question(role, history)
