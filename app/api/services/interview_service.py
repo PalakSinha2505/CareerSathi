@@ -163,7 +163,7 @@ def generate_question(role: str, experience_level: str, history: List[Dict]) -> 
                 "max_tokens": 200,
                 "temperature": 0.6
             },
-            timeout=90
+            timeout=15
         )
 
         if response.status_code != 200:
