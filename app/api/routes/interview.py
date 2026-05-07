@@ -65,7 +65,7 @@ def get_next_question(
 # 2️⃣  Evaluate Full Interview
 # =====================================================
 
-@router.post("/evaluate", response_model=InterviewResponse)
+@router.post("/evaluate")
 @limiter.limit("5/minute")
 def evaluate_interview(
     request: Request,
@@ -139,14 +139,22 @@ def evaluate_interview(
         for qa in interview.answers
     ]
 
-    return InterviewResponse(
-        id=interview.id,
-        role=interview.role,
-        level=interview.level,
-        score=interview.score,
-        created_at=str(interview.created_at),
-        responses=responses,
-    )
+    return {
+        "id": interview.id,
+        "role": interview.role,
+        "level": interview.level,
+        "score": dict(interview.score) if interview.score else None,
+        "created_at": str(interview.created_at),
+        "responses": [
+            {
+                "question": qa.question,
+                "answer": qa.answer,
+                "analysis": qa.analysis,
+                "feedback": qa.feedback,
+            }
+            for qa in interview.answers
+        ]
+    }
 
 
 # =====================================================
