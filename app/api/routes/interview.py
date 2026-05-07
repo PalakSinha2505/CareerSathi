@@ -220,7 +220,12 @@ def get_analytics(
             "questions_breakdown": {},
         }
 
-    scores = [i.score["overall_score"] for i in interviews if i.score]
+    scores = [
+        i.score["overall_score"] if isinstance(i.score, dict)
+        else i.score
+        for i in interviews
+        if i.score is not None
+    ]
 
     average_score = sum(scores) / len(scores) if scores else 0
     highest_score = max(scores) if scores else 0

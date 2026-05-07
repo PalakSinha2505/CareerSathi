@@ -34,6 +34,28 @@ Do NOT give 7+ unless the answer is structured and confident.
 Ensure newline characters inside strings are escaped using \\n.
 Return raw JSON only.
 Do NOT wrap JSON in markdown.
+
+STRICT RULES:
+- Return ONLY valid JSON
+- DO NOT add any explanation before or after
+- DO NOT use markdown
+- DO NOT write anything except JSON
+- Ensure all quotes are properly escaped
+
+FORMAT:
+{
+  "scores": {
+    "clarity": number,
+    "communication": number,
+    "confidence": number,
+    "structure": number,
+    "english": number
+  },
+  "strengths": "text",
+  "improvements": "text",
+  "suggested_rewrite": "text"
+}
+
 """
 
 DEFAULT_RESPONSE = {
@@ -127,20 +149,40 @@ Return ONLY valid JSON in this format:
                 raise Exception(f"HF API error {response.status_code}: {response.text}")
 
             result = response.json()
-            raw_text = result["choices"][0]["message"]["content"]
+
+            if "choices" not in result or not result["choices"]:
+                raise Exception(f"No choices returned: {result}")
+
+            choice = result["choices"][0]
+
+            if "message" not in choice or "content" not in choice["message"]:
+                raise Exception(f"Malformed response structure: {choice}")
+
+            raw_text = choice["message"]["content"]
 
             cleaned = _clean_json(raw_text)
+            print("CLEANED:", cleaned)
 
             # strict=False prevents control character crash
-            parsed = json.loads(cleaned, strict=False)
+            try:
+                parsed = json.loads(cleaned, strict=False)
+            except Exception as e:
+                print("JSON PARSE FAILED:", cleaned)
+                raise e
             # Ensure required fields exist
             if "scores" not in parsed:
-                return DEFAULT_RESPONSE
+                return {
+                    **DEFAULT_RESPONSE,
+                    "error": "MODEL_FAILED"
+                }
 
             return parsed
 
         except Exception as e:
             print("REAL ERROR:", e)
             if attempt == 1:
-                return DEFAULT_RESPONSE
+                return {
+                    **DEFAULT_RESPONSE,
+                    "error": str(e)
+                }
             time.sleep(1)
